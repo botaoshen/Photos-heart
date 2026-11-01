@@ -1,0 +1,1526 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>照片</title>
+<style>
+:root{
+  --bg:#fff; --fg:#000; --sub:#8e8e93; --bar:rgba(249,249,249,.84); --sep:rgba(60,60,67,.2);
+  --accent:#007aff; --heart:#ff2d55; --thumb:#e5e5ea; --sheet:rgba(250,250,250,.94); --danger:#ff3b30; --card:#fff;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#000; --fg:#fff; --bar:rgba(24,24,26,.84); --sep:rgba(84,84,88,.55); --accent:#0a84ff; --thumb:#1c1c1e; --sheet:rgba(44,44,46,.94); --danger:#ff453a; --card:#1c1c1e; }
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;min-height:100vh;overscroll-behavior-y:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+svg{display:block}
+[hidden]{display:none!important}
+
+/* ---------- nav ---------- */
+.nav{position:fixed;top:0;left:0;right:0;z-index:10;padding-top:env(safe-area-inset-top);
+  border-bottom:.5px solid transparent;transition:background-color .2s,border-color .2s}
+.nav.scrolled{background:var(--bar);border-color:var(--sep);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.nav-inner{position:relative;height:44px;max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:center}
+.nav-title{font-size:17px;font-weight:600;opacity:0;transition:opacity .2s;max-width:50%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav.scrolled .nav-title{opacity:1}
+.nav-back{position:absolute;left:4px;height:44px;padding-right:8px;display:none;align-items:center;color:var(--accent);font-size:17px}
+.nav-back svg{width:24px;height:24px}
+.nav.has-back .nav-back{display:flex}
+.nav-add{position:absolute;right:8px;height:44px;padding:0 8px;display:flex;align-items:center;gap:2px;color:var(--accent);font-size:17px}
+.nav-add svg{width:22px;height:22px}
+#addIcon{display:flex}
+.nav-add.danger{color:var(--danger)}
+.nav-add.danger svg{display:none}
+
+main{max-width:1200px;margin:0 auto;padding:calc(44px + env(safe-area-inset-top)) 0 calc(49px + env(safe-area-inset-bottom) + 28px)}
+.head{padding:2px 16px 12px}
+.large-title{font-size:34px;font-weight:700;letter-spacing:.01em;line-height:1.2;overflow-wrap:anywhere}
+.subtitle{color:var(--sub);font-size:15px;margin-top:2px;min-height:1px}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+@media (min-width:600px){.grid{grid-template-columns:repeat(4,1fr)}}
+@media (min-width:900px){.grid{grid-template-columns:repeat(5,1fr)}}
+@media (min-width:1150px){.grid{grid-template-columns:repeat(6,1fr)}}
+.cell{position:relative;display:block;width:100%;aspect-ratio:1/1;overflow:hidden;background:var(--thumb)}
+.cell img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s;-webkit-user-drag:none;user-select:none}
+.cell img.loaded{opacity:1}
+.cell:active img{filter:brightness(.8)}
+.cell.lifted{visibility:hidden}
+.cell .badge{position:absolute;left:5px;bottom:5px;width:15px;height:15px;color:#fff;display:none;filter:drop-shadow(0 0 2px rgba(0,0,0,.55))}
+.cell.fav .badge{display:block}
+.cell .check{position:absolute;right:6px;bottom:6px;width:24px;height:24px;border-radius:50%;border:1.5px solid #fff;
+  background:rgba(0,0,0,.18);box-shadow:0 0 3px rgba(0,0,0,.35);display:none;align-items:center;justify-content:center}
+.cell .check svg{width:14px;height:14px;opacity:0}
+body.selecting .cell .check{display:flex}
+.cell.sel .check{background:var(--accent)}
+.cell.sel .check svg{opacity:1}
+.cell.sel::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,.22);pointer-events:none}
+
+/* selection toolbar (replaces the tab bar while choosing photos) */
+.selbar{position:fixed;left:0;right:0;bottom:0;z-index:11;display:none;align-items:center;justify-content:space-between;
+  padding:0 12px env(safe-area-inset-bottom);height:calc(49px + env(safe-area-inset-bottom));
+  background:var(--bar);border-top:.5px solid var(--sep);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+body.selecting .selbar{display:flex}
+body.selecting .tabbar{display:none}
+.selbar button{min-width:100px;height:44px;display:flex;align-items:center;gap:4px;color:var(--accent);font-size:17px}
+.selbar button:disabled{color:var(--sub);cursor:default}
+.selbar svg{width:22px;height:22px}
+.sel-share{justify-content:flex-end;font-weight:600}
+#selCount{flex:1;text-align:center;font-size:15px;font-weight:600;white-space:nowrap}
+
+/* ---------- albums (folders) ---------- */
+.albums{display:grid;grid-template-columns:repeat(2,1fr);gap:20px 14px;padding:0 16px}
+@media (min-width:600px){.albums{grid-template-columns:repeat(3,1fr)}}
+@media (min-width:900px){.albums{grid-template-columns:repeat(4,1fr)}}
+@media (min-width:1150px){.albums{grid-template-columns:repeat(5,1fr)}}
+.album{display:block;text-align:left;min-width:0}
+.album .cover{position:relative;aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:var(--thumb);
+  display:flex;align-items:center;justify-content:center;color:var(--sub)}
+.album .cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
+.album .cover img.loaded{opacity:1}
+.album .cover svg{width:44px;height:44px}
+.album:active .cover{filter:brightness(.85)}
+.album .name{margin-top:7px;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.album .meta{font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.album.locked .meta{color:var(--accent)}
+.album.new .cover{background:transparent;border:1.5px dashed var(--sep);color:var(--accent)}
+.album.new .name{color:var(--accent)}
+.hint{padding:28px 16px 0;color:var(--sub);font-size:14px;line-height:1.55}
+
+.empty{display:none;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:90px 32px;color:var(--sub)}
+.empty.show{display:flex}
+.empty svg{width:56px;height:56px;color:var(--sub);opacity:.6}
+.empty b{color:var(--fg);font-size:20px;font-weight:600}
+.empty .btn{margin-top:8px;padding:10px 20px;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;font-weight:600}
+
+/* ---------- tab bar ---------- */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;justify-content:center;
+  padding-bottom:env(safe-area-inset-bottom);background:var(--bar);border-top:.5px solid var(--sep);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.tab{flex:0 1 150px;height:49px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:500;color:var(--sub)}
+.tab svg{width:26px;height:26px}
+.tab.active{color:var(--accent)}
+
+/* ---------- action sheet ---------- */
+.sheet{position:fixed;inset:0;z-index:120;display:flex;flex-direction:column;justify-content:flex-end;
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom));background:rgba(0,0,0,0);pointer-events:none;transition:background-color .25s}
+.sheet.show{background:rgba(0,0,0,.35);pointer-events:auto}
+.sheet-box{width:100%;max-width:420px;margin:0 auto;transform:translateY(130%);transition:transform .32s cubic-bezier(.2,.9,.3,1)}
+.sheet.show .sheet-box{transform:none}
+.sheet-group{background:var(--sheet);border-radius:14px;overflow:hidden;margin-top:8px;
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.sheet-group button{display:block;width:100%;height:57px;font-size:19px;color:var(--accent);border-top:.5px solid var(--sep)}
+.sheet-group button:first-child{border-top:0}
+.sheet-group button:active{background:rgba(127,127,127,.15)}
+.sheet-cancel{font-weight:600}
+
+/* ---------- share to iPhone ---------- */
+.modal{position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.4);animation:fade .2s}
+.modal-card{width:100%;max-width:360px;max-height:100%;overflow:auto;background:var(--card);border-radius:18px;padding:22px 20px 14px;text-align:center;
+  box-shadow:0 20px 60px rgba(0,0,0,.3);animation:rise .3s cubic-bezier(.2,.9,.3,1)}
+@keyframes fade{from{opacity:0}}
+@keyframes rise{from{transform:translateY(24px) scale(.97);opacity:0}}
+.modal-card h2{font-size:19px;font-weight:600;margin-bottom:12px}
+.qr{width:216px;height:216px;margin:4px auto 12px;padding:12px;background:#fff;border-radius:14px}
+.qr svg{width:100%;height:100%;display:block}
+.share-url{font-size:15px;font-weight:600;color:var(--accent);word-break:break-all;user-select:all}
+.steps{text-align:left;margin:14px 4px 6px;padding-left:20px;font-size:14px;line-height:1.65}
+.share-note{font-size:13px;color:var(--sub);line-height:1.55;margin-top:8px}
+.share-note.big{font-size:15px;color:var(--fg)}
+.progress{height:6px;border-radius:3px;background:var(--thumb);overflow:hidden;margin:18px 0 8px}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.modal-done{display:block;width:100%;margin-top:16px;height:46px;border-radius:12px;font-size:17px;font-weight:600;color:var(--accent);background:var(--thumb)}
+
+/* ---------- viewer ---------- */
+#viewer{position:fixed;inset:0;z-index:100;display:none;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#viewer.open{display:block}
+.v-bg{position:absolute;inset:0;background:var(--bg);transition:background-color .25s}
+#viewer.immersive .v-bg{background:#000}
+.v-track{position:absolute;inset:0;will-change:transform}
+.slide{position:absolute;top:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.slide img{flex:none;display:block;pointer-events:none;-webkit-user-drag:none;will-change:transform}
+.flyer{position:absolute;left:0;top:0;z-index:1;overflow:hidden;pointer-events:none;will-change:transform}
+.flyer img{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+
+.v-top,.v-bottom{position:absolute;left:0;right:0;z-index:2;background:var(--bar);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);transition:opacity .25s}
+.v-top{top:0;padding-top:env(safe-area-inset-top);border-bottom:.5px solid var(--sep)}
+.v-bottom{bottom:0;padding-bottom:env(safe-area-inset-bottom);border-top:.5px solid var(--sep)}
+.v-top-inner{position:relative;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 8px}
+.v-back{display:flex;align-items:center;height:44px;padding-right:8px;color:var(--accent);font-size:17px;z-index:1;max-width:30%}
+.v-back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v-back svg{width:24px;height:24px;flex:none}
+.v-info{position:absolute;left:0;right:0;text-align:center;line-height:1.2;pointer-events:none}
+.v-info b{display:block;font-size:15px;font-weight:600}
+.v-info span{display:block;max-width:44%;margin:0 auto;font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v-count{font-size:13px;color:var(--sub);padding:0 8px;font-variant-numeric:tabular-nums;z-index:1}
+.v-bottom-inner{height:49px;display:flex;align-items:center;justify-content:center}
+.heart-btn{width:56px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.heart-btn svg{width:28px;height:28px}
+.heart-btn .fill{display:none}
+.heart-btn.on{color:var(--heart)}
+.heart-btn.on .fill{display:block}
+.heart-btn.on .line{display:none}
+.heart-btn.pop svg{animation:pop .42s cubic-bezier(.3,1.6,.5,1)}
+@keyframes pop{0%{transform:scale(1)}30%{transform:scale(.7)}65%{transform:scale(1.3)}100%{transform:scale(1)}}
+
+#viewer.immersive .v-top,#viewer.immersive .v-bottom,#viewer.nochrome .v-top,#viewer.nochrome .v-bottom,
+#viewer.dragging .v-top,#viewer.dragging .v-bottom{opacity:0;pointer-events:none}
+
+.burst{position:absolute;left:50%;top:50%;z-index:3;width:110px;height:110px;margin:-55px 0 0 -55px;color:#fff;
+  opacity:0;pointer-events:none;filter:drop-shadow(0 4px 18px rgba(0,0,0,.35))}
+.burst.go{animation:burst .8s ease-out}
+@keyframes burst{0%{opacity:0;transform:scale(.3)}20%{opacity:1;transform:scale(1.15)}35%{transform:scale(.95)}55%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.05)}}
+
+.v-arrow{display:none;position:absolute;top:50%;z-index:2;width:44px;height:44px;margin-top:-22px;border-radius:50%;
+  align-items:center;justify-content:center;color:#fff;background:rgba(0,0,0,.35);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);opacity:0;transition:opacity .2s}
+.v-arrow svg{width:22px;height:22px}
+.v-arrow.prev{left:16px}.v-arrow.next{right:16px}
+@media (hover:hover) and (pointer:fine){
+  .v-arrow{display:flex}
+  #viewer:hover .v-arrow:not(:disabled){opacity:1}
+  #viewer.dragging .v-arrow,#viewer.nochrome .v-arrow{opacity:0!important}
+}
+.v-arrow:disabled{pointer-events:none}
+
+/* ---------- misc ---------- */
+.toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));z-index:200;transform:translate(-50%,10px);
+  background:rgba(40,40,42,.92);color:#fff;font-size:14px;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100% - 32px);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.drop{position:fixed;inset:12px;z-index:150;display:none;align-items:center;justify-content:center;border:2px dashed var(--accent);border-radius:20px;
+  background:color-mix(in srgb,var(--bg) 85%,transparent);color:var(--accent);font-size:20px;font-weight:600;pointer-events:none}
+body.dragover .drop{display:flex}
+</style>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <button class="nav-back" id="navBack" data-i18n-aria="backToFolders">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span data-i18n="folders">文件夹</span>
+    </button>
+    <span class="nav-title" id="navTitle">图库</span>
+    <button class="nav-add" id="addBtn"><span id="addIcon"></span><span id="addLabel">添加</span></button>
+  </div>
+</header>
+
+<main>
+  <div class="head">
+    <h1 class="large-title" id="title">图库</h1>
+    <p class="subtitle" id="count"></p>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="albums" id="albums" hidden></div>
+  <p class="hint" id="albumHint" data-i18n-html="albumHint" hidden>选择电脑上的一个文件夹，里面的图片（包括子文件夹里的）会自动显示在这里。<br>以后往这个文件夹里放新照片，重新打开 app 就能看到。</p>
+  <div class="empty" id="empty">
+    <span id="emptyIcon"></span>
+    <b id="emptyTitle"></b>
+    <span id="emptyText"></span>
+    <button class="btn" id="emptyBtn" hidden></button>
+  </div>
+</main>
+
+<nav class="tabbar">
+  <button class="tab active" data-tab="all">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M3.5 17l5-4.5 3.5 3 3-2.5 5.5 4.5"/></svg>
+    <span data-i18n="library">图库</span>
+  </button>
+  <button class="tab" data-tab="fav">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20.5s-7.5-4.6-9.6-9.2C.8 7.6 3 4 6.6 4c2.2 0 3.9 1.2 5.4 3.1C13.5 5.2 15.2 4 17.4 4 21 4 23.2 7.6 21.6 11.3 19.5 15.9 12 20.5 12 20.5z"/></svg>
+    <span data-i18n="favorites">收藏</span>
+  </button>
+  <button class="tab" data-tab="folders">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>
+    <span data-i18n="folders">文件夹</span>
+  </button>
+</nav>
+
+<div class="selbar" id="selbar">
+  <button id="selAll">全选</button>
+  <span id="selCount">点照片来选择</span>
+  <button class="sel-share" id="selShare" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M8 10H6.5A2.5 2.5 0 0 0 4 12.5v6A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5H16"/></svg><span data-i18n="share">分享</span>
+  </button>
+</div>
+
+<div id="viewer" aria-modal="true" role="dialog">
+  <div class="v-bg" id="vBg"></div>
+  <div class="v-track" id="track"></div>
+  <header class="v-top">
+    <div class="v-top-inner">
+      <button class="v-back" id="closeBtn" data-i18n-aria="back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg><span id="backLabel">图库</span>
+      </button>
+      <div class="v-info"><b id="vDate"></b><span id="vTime"></span></div>
+      <span class="v-count" id="vCount"></span>
+    </div>
+  </header>
+  <footer class="v-bottom">
+    <div class="v-bottom-inner">
+      <button class="heart-btn" id="heartBtn" aria-label="收藏" aria-pressed="false">
+        <svg viewBox="0 0 24 24">
+          <path class="line" fill="none" stroke="currentColor" stroke-width="1.8" d="M12 20.5s-7.5-4.6-9.6-9.2C.8 7.6 3 4 6.6 4c2.2 0 3.9 1.2 5.4 3.1C13.5 5.2 15.2 4 17.4 4 21 4 23.2 7.6 21.6 11.3 19.5 15.9 12 20.5 12 20.5z"/>
+          <path class="fill" fill="currentColor" d="M12 20.5s-7.5-4.6-9.6-9.2C.8 7.6 3 4 6.6 4c2.2 0 3.9 1.2 5.4 3.1C13.5 5.2 15.2 4 17.4 4 21 4 23.2 7.6 21.6 11.3 19.5 15.9 12 20.5 12 20.5z"/>
+        </svg>
+      </button>
+    </div>
+  </footer>
+  <button class="v-arrow prev" id="prevBtn" data-i18n-aria="prev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="v-arrow next" id="nextBtn" data-i18n-aria="next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+  <svg class="burst" id="burst" viewBox="0 0 24 24"><path fill="currentColor" d="M12 20.5s-7.5-4.6-9.6-9.2C.8 7.6 3 4 6.6 4c2.2 0 3.9 1.2 5.4 3.1C13.5 5.2 15.2 4 17.4 4 21 4 23.2 7.6 21.6 11.3 19.5 15.9 12 20.5 12 20.5z"/></svg>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="sheet-box">
+    <div class="sheet-group">
+      <button id="pickPhotos" data-i18n="pickPhotos">选择照片</button>
+      <button id="pickFolder" data-i18n="pickFolder">选择文件夹</button>
+    </div>
+    <div class="sheet-group"><button class="sheet-cancel" id="sheetCancel" data-i18n="cancel">取消</button></div>
+  </div>
+</div>
+
+<div class="modal" id="shareModal" hidden>
+  <div class="modal-card" role="dialog" aria-labelledby="shareTitle">
+    <h2 id="shareTitle" data-i18n="shareToIphone">分享到 iPhone</h2>
+    <div id="shareBody"></div>
+    <button class="modal-done" id="shareDone" data-i18n="done">完成</button>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*" multiple hidden>
+<input type="file" id="folderInput" webkitdirectory multiple hidden>
+<div class="toast" id="toast"></div>
+<div class="drop" data-i18n="dropHint">松开即可添加照片</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const clamp01 = x => clamp(x, 0, 1);
+const lerp = (a, b, t) => a + (b - a) * t;
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const GAP = 20;          // space between photos while swiping, like iOS
+const MAX_SCALE = 4;
+const IMG_RE = /\.(jpe?g|jfif|png|gif|webp|avif|bmp|svg)$/i;
+
+/* ================= language ================= */
+// Follows the system/browser language: Simplified Chinese, Traditional Chinese, otherwise English.
+const LANG = (() => {
+  const l = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
+  if (/^zh/i.test(l)) return /hant|-(tw|hk|mo)\b/i.test(l) ? 'zht' : 'zh';
+  return 'en';
+})();
+const LOCALE = navigator.language || 'en';
+const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const STR = {
+  zh: {
+    appTitle: '照片', library: '图库', favorites: '收藏', folders: '文件夹', add: '添加', remove: '移除', cancel: '取消',
+    shareToIphone: '分享到 iPhone', share: '分享', selectAll: '全选', deselectAll: '取消全选', tapToSelect: '点照片来选择',
+    nSelected: '已选择 {n} 张', pickPhotos: '选择照片', pickFolder: '选择文件夹', addFolder: '添加文件夹', done: '完成',
+    dropHint: '松开即可添加照片', back: '返回', backToFolders: '返回文件夹', prev: '上一张', next: '下一张',
+    fav: '收藏', unfav: '取消收藏', photoAria: '照片 {d}', qr: '二维码', today: '今天', yesterday: '昨天',
+    nPhotos: '{n} 张照片', nFavs: '{n} 张收藏', nImages: '{n} 张图片', nFolders: '{n} 个文件夹', nShort: '{n} 张',
+    albumHint: '选择电脑上的一个文件夹，里面的图片（包括子文件夹里的）会自动显示在这里。<br>以后往这个文件夹里放新照片，重新打开 app 就能看到。',
+    emptyFavTitle: '还没有收藏', emptyFavText: '浏览照片时点一下 ♡，照片就会出现在这里。',
+    emptyAllTitle: '没有照片', emptyAllText: '点右上角「添加」选择照片或文件夹。',
+    loading: '正在读取…', lockedTitle: '需要你的允许', lockedText: '浏览器需要你同意，才能读取这个文件夹里的图片。', allowAccess: '允许访问',
+    errorTitle: '无法读取文件夹', errorText: '它可能已被移动、改名或删除。可以移除后重新添加。',
+    noImagesTitle: '没有图片', noImagesText: '这个文件夹里还没有图片。',
+    metaLocked: '点按以允许访问', metaError: '无法读取',
+    noAccess: '没有获得访问权限', cantOpenFolder: '无法打开这个文件夹', folderExists: '这个文件夹已经添加过了',
+    cantRemember: '无法记住这个文件夹，下次需要重新添加', folderAdded: '已添加「{name}」· {n} 张图片',
+    removeConfirm: '移除文件夹「{name}」？\n只是从 app 里移除，电脑上的文件不会被删除。', folderRemoved: '已移除「{name}」', folderDefault: '文件夹',
+    addedPhotos: '已添加 {n} 张照片', someFailed: '，{n} 个文件无法读取', cantRead: '这些文件无法读取', noImagesFound: '没有找到图片',
+    noFavsYet: '还没有收藏的照片', noneSelected: '没有选择照片', preparing: '正在准备…', preparingN: '正在准备 {i} / {n} 张…',
+    needServer: '还需要先打开分享服务：双击 app 文件夹里的 <b>「启动照片.cmd」</b>，让弹出的黑色窗口保持打开，然后回来再点一次「分享到 iPhone」。',
+    needServerNote: '它会在电脑上开一个小服务器，让 iPhone 通过 Wi-Fi 取照片。如果浏览器问是否允许访问本地网络设备，请选「允许」。',
+    noWifi: '没有找到 Wi-Fi 网络。请确认电脑已经连上 Wi-Fi 或家里的网络。',
+    step1: 'iPhone 连上和电脑<b>同一个 Wi-Fi</b>', step2: '用 iPhone 的<b>相机</b>扫二维码，点弹出的链接',
+    step3: '长按照片 →「存储到“照片”」，或点「全部下载」',
+    ready: '{n} 张照片已准备好', readyFailed: '，{n} 张读取失败',
+    firewall: '。iPhone 打不开的话：看看电脑上有没有 Windows 防火墙提示，选「允许」。', tryAlso: '也可以试试：',
+    ariaRemoveFolder: '移除这个文件夹', ariaCancelSelect: '取消选择', ariaShare: '选择要分享到 iPhone 的照片',
+    ariaAddFolder: '添加文件夹', ariaAdd: '添加照片或文件夹',
+  },
+  zht: {
+    appTitle: '照片', library: '圖庫', favorites: '收藏', folders: '資料夾', add: '加入', remove: '移除', cancel: '取消',
+    shareToIphone: '分享到 iPhone', share: '分享', selectAll: '全選', deselectAll: '取消全選', tapToSelect: '點照片來選擇',
+    nSelected: '已選擇 {n} 張', pickPhotos: '選擇照片', pickFolder: '選擇資料夾', addFolder: '加入資料夾', done: '完成',
+    dropHint: '放開即可加入照片', back: '返回', backToFolders: '返回資料夾', prev: '上一張', next: '下一張',
+    fav: '收藏', unfav: '取消收藏', photoAria: '照片 {d}', qr: 'QR 碼', today: '今天', yesterday: '昨天',
+    nPhotos: '{n} 張照片', nFavs: '{n} 張收藏', nImages: '{n} 張圖片', nFolders: '{n} 個資料夾', nShort: '{n} 張',
+    albumHint: '選擇電腦上的一個資料夾，裡面的圖片（包括子資料夾裡的）會自動顯示在這裡。<br>之後在這個資料夾裡放新照片，重新開啟 app 就能看到。',
+    emptyFavTitle: '還沒有收藏', emptyFavText: '瀏覽照片時點一下 ♡，照片就會出現在這裡。',
+    emptyAllTitle: '沒有照片', emptyAllText: '點右上角「加入」選擇照片或資料夾。',
+    loading: '正在讀取…', lockedTitle: '需要你的允許', lockedText: '瀏覽器需要你同意，才能讀取這個資料夾裡的圖片。', allowAccess: '允許存取',
+    errorTitle: '無法讀取資料夾', errorText: '它可能已被移動、改名或刪除。可以移除後重新加入。',
+    noImagesTitle: '沒有圖片', noImagesText: '這個資料夾裡還沒有圖片。',
+    metaLocked: '點按以允許存取', metaError: '無法讀取',
+    noAccess: '沒有取得存取權限', cantOpenFolder: '無法開啟這個資料夾', folderExists: '這個資料夾已經加入過了',
+    cantRemember: '無法記住這個資料夾，下次需要重新加入', folderAdded: '已加入「{name}」· {n} 張圖片',
+    removeConfirm: '移除資料夾「{name}」？\n只會從 app 中移除，電腦上的檔案不會被刪除。', folderRemoved: '已移除「{name}」', folderDefault: '資料夾',
+    addedPhotos: '已加入 {n} 張照片', someFailed: '，{n} 個檔案無法讀取', cantRead: '這些檔案無法讀取', noImagesFound: '沒有找到圖片',
+    noFavsYet: '還沒有收藏的照片', noneSelected: '沒有選擇照片', preparing: '正在準備…', preparingN: '正在準備 {i} / {n} 張…',
+    needServer: '需要先開啟分享服務：按兩下 app 資料夾裡的 <b>「启动照片.cmd」</b>，讓跳出的黑色視窗保持開啟，然後回來再點一次「分享到 iPhone」。',
+    needServerNote: '它會在電腦上開一個小伺服器，讓 iPhone 透過 Wi-Fi 取得照片。如果瀏覽器詢問是否允許存取區域網路裝置，請選「允許」。',
+    noWifi: '找不到 Wi-Fi 網路。請確認電腦已經連上 Wi-Fi 或家裡的網路。',
+    step1: 'iPhone 連上和電腦<b>同一個 Wi-Fi</b>', step2: '用 iPhone 的<b>相機</b>掃描 QR 碼，點跳出的連結',
+    step3: '長按照片 →「儲存到“照片”」，或點「全部下載」',
+    ready: '{n} 張照片已準備好', readyFailed: '，{n} 張讀取失敗',
+    firewall: '。iPhone 打不開的話：看看電腦上有沒有 Windows 防火牆提示，選「允許」。', tryAlso: '也可以試試：',
+    ariaRemoveFolder: '移除這個資料夾', ariaCancelSelect: '取消選擇', ariaShare: '選擇要分享到 iPhone 的照片',
+    ariaAddFolder: '加入資料夾', ariaAdd: '加入照片或資料夾',
+  },
+  en: {
+    appTitle: 'Photos', library: 'Library', favorites: 'Favorites', folders: 'Folders', add: 'Add', remove: 'Remove', cancel: 'Cancel',
+    shareToIphone: 'Share to iPhone', share: 'Share', selectAll: 'Select All', deselectAll: 'Deselect All', tapToSelect: 'Tap photos to select',
+    nSelected: v => `${v.n} selected`, pickPhotos: 'Choose Photos', pickFolder: 'Choose Folder', addFolder: 'Add Folder', done: 'Done',
+    dropHint: 'Drop to add photos', back: 'Back', backToFolders: 'Back to Folders', prev: 'Previous', next: 'Next',
+    fav: 'Favorite', unfav: 'Unfavorite', photoAria: 'Photo, {d}', qr: 'QR code', today: 'Today', yesterday: 'Yesterday',
+    nPhotos: v => pl(v.n, 'photo', 'photos'), nFavs: v => pl(v.n, 'favorite', 'favorites'), nImages: v => pl(v.n, 'photo', 'photos'),
+    nFolders: v => pl(v.n, 'folder', 'folders'), nShort: v => pl(v.n, 'photo', 'photos'),
+    albumHint: 'Choose a folder on your computer and its pictures (including those in subfolders) will show up here.<br>New photos you put in the folder appear the next time you open the app.',
+    emptyFavTitle: 'No Favorites Yet', emptyFavText: 'Tap ♡ while viewing a photo and it will show up here.',
+    emptyAllTitle: 'No Photos', emptyAllText: 'Tap “Add” at the top right to choose photos or a folder.',
+    loading: 'Loading…', lockedTitle: 'Permission Needed', lockedText: 'Your browser needs your permission to read the pictures in this folder.', allowAccess: 'Allow Access',
+    errorTitle: 'Can’t Read Folder', errorText: 'It may have been moved, renamed or deleted. Remove it and add it again.',
+    noImagesTitle: 'No Pictures', noImagesText: 'This folder doesn’t have any pictures yet.',
+    metaLocked: 'Tap to allow access', metaError: 'Can’t read',
+    noAccess: 'Access wasn’t granted', cantOpenFolder: 'Couldn’t open this folder', folderExists: 'This folder has already been added',
+    cantRemember: 'Couldn’t remember this folder. You’ll need to add it again next time.',
+    folderAdded: v => `Added “${v.name}” · ${pl(v.n, 'photo', 'photos')}`,
+    removeConfirm: 'Remove the folder “{name}”?\nThis only removes it from the app. Files on your computer are not deleted.',
+    folderRemoved: 'Removed “{name}”', folderDefault: 'Folder',
+    addedPhotos: v => `Added ${pl(v.n, 'photo', 'photos')}`, someFailed: v => `, ${pl(v.n, 'file', 'files')} couldn’t be read`,
+    cantRead: 'These files couldn’t be read', noImagesFound: 'No pictures found',
+    noFavsYet: 'No favorite photos yet', noneSelected: 'No photos selected', preparing: 'Preparing…', preparingN: 'Preparing {i} of {n}…',
+    needServer: 'First start the sharing service: double-click <b>启动照片.cmd</b> in the app folder, keep the black window open, then come back and tap “Share to iPhone” again.',
+    needServerNote: 'It runs a small server on this computer so your iPhone can get the photos over Wi-Fi. If your browser asks to access devices on your local network, choose “Allow”.',
+    noWifi: 'No Wi-Fi network found. Make sure this computer is connected to Wi-Fi or your home network.',
+    step1: 'Connect your iPhone to the <b>same Wi-Fi</b> as this computer', step2: 'Scan the QR code with the iPhone <b>Camera</b> and tap the link',
+    step3: 'Touch and hold a photo → “Save to Photos”, or tap “Download All”',
+    ready: v => `${pl(v.n, 'photo', 'photos')} ready`, readyFailed: v => `, ${v.n} couldn’t be read`,
+    firewall: '. If the iPhone can’t open the link, look for a Windows Firewall prompt on this computer and choose “Allow”.', tryAlso: 'You can also try:',
+    ariaRemoveFolder: 'Remove this folder', ariaCancelSelect: 'Cancel selection', ariaShare: 'Choose photos to share to iPhone',
+    ariaAddFolder: 'Add folder', ariaAdd: 'Add photos or a folder',
+  },
+};
+function tr(key, v = {}) {
+  const s = STR[LANG][key] ?? STR.en[key] ?? key;
+  return typeof s === 'function' ? s(v) : s.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '');
+}
+document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : LANG === 'zht' ? 'zh-TW' : 'en';
+document.title = tr('appTitle');
+document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tr(el.dataset.i18n); });
+document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = tr(el.dataset.i18nHtml); });
+document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', tr(el.dataset.i18nAria)));
+
+const nav = $('#nav'), grid = $('#grid'), albumsEl = $('#albums'), albumHint = $('#albumHint');
+const titleEl = $('#title'), navTitle = $('#navTitle'), countEl = $('#count'), emptyEl = $('#empty');
+const addBtn = $('#addBtn'), addLabel = $('#addLabel');
+const tabbar = $('.tabbar');
+const viewer = $('#viewer'), bg = $('#vBg'), track = $('#track');
+const vDate = $('#vDate'), vTime = $('#vTime'), vCount = $('#vCount'), heartBtn = $('#heartBtn'), backLabel = $('#backLabel');
+const prevBtn = $('#prevBtn'), nextBtn = $('#nextBtn'), burst = $('#burst');
+
+const ICON = {
+  heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20.5s-7.5-4.6-9.6-9.2C.8 7.6 3 4 6.6 4c2.2 0 3.9 1.2 5.4 3.1C13.5 5.2 15.2 4 17.4 4 21 4 23.2 7.6 21.6 11.3 19.5 15.9 12 20.5 12 20.5z"/></svg>',
+  photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M3.5 17l5-4.5 3.5 3 3-2.5 5.5 4.5"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.2v.3" stroke-linecap="round"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>',
+};
+
+/* ================= storage ================= */
+const FAV_KEY = 'photos.favorites.v1';
+function loadFavs() { try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); } catch { return new Set(); } }
+function saveFavs() { try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch {} }
+
+const db = (() => {
+  let p;
+  const open = () => p || (p = new Promise((res, rej) => {
+    const r = indexedDB.open('photo-app', 2);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      for (const [name, key] of [['photos', 'id'], ['folders', 'id'], ['thumbs', 'key']])
+        if (!d.objectStoreNames.contains(name)) d.createObjectStore(name, { keyPath: key });
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+  const tx = async (store, mode, fn) => {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const t = d.transaction(store, mode);
+      const req = fn(t.objectStore(store));
+      t.oncomplete = () => res(req && req.result);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error);
+    });
+  };
+  return {
+    all: s => tx(s, 'readonly', st => st.getAll()),
+    get: (s, k) => tx(s, 'readonly', st => st.get(k)),
+    put: (s, rec) => tx(s, 'readwrite', st => st.put(rec)),
+    del: (s, k) => tx(s, 'readwrite', st => st.delete(k)),
+  };
+})();
+
+/* ================= data ================= */
+const DEMO_IDS = [10,11,12,13,14,15,16,17,18,19,20,22,24,25,27,28,29,37,39,42,43,49,50,53,54,55,56,57,58,59,64,65];
+const SHAPES = [[1200,1600],[1600,1067],[1200,1200],[1600,1200],[1080,1920],[1600,900]];
+const BASE = new Date(2026, 10, 1, 15, 20).getTime();
+const demo = DEMO_IDS.map((pid, i) => {
+  const [w, h] = SHAPES[(i * 5 + 2) % SHAPES.length];
+  return {
+    id: 'd' + pid, w, h,
+    src: `https://picsum.photos/id/${pid}/${w}/${h}`,
+    thumb: `https://picsum.photos/id/${pid}/${Math.round(w / 4)}/${Math.round(h / 4)}`,
+    date: BASE - (i * 29 + (i * i * 7) % 17) * 3600e3,
+  };
+});
+
+let imported = [];     // single photos added with 选择照片 (stored in the browser)
+let folders = [];      // {id, name, kind:'handle'|'copy', handle, added, photos, status:'loading'|'ok'|'locked'|'error'}
+let photos = demo.slice();
+let byId = new Map();
+let favs = loadFavs();
+let tab = 'all', folderId = null;
+let favDirty = false, needsRender = false;
+let selecting = false;
+const selected = new Set();   // photo ids picked in selection mode
+
+const byDate = (a, b) => b.date - a.date;
+// Demo photos only show until you add your own photos or folders.
+function rebuild() {
+  const own = imported.concat(...folders.map(f => f.photos)).sort(byDate);
+  photos = (imported.length || folders.length) ? own : demo.slice();
+  byId = new Map();
+  for (const p of demo) byId.set(p.id, p);
+  for (const p of own) byId.set(p.id, p);
+}
+rebuild();
+
+const fromRec = r => ({
+  id: r.id, w: r.w, h: r.h, date: r.date, local: true, name: r.name,
+  src: URL.createObjectURL(r.blob), thumb: URL.createObjectURL(r.thumbBlob || r.blob),
+});
+
+const fbCache = new Map();
+function fallback(p) {  // placeholder if an image can't load
+  if (fbCache.has(p.id)) return fbCache.get(p.id);
+  const w = p.w || 1, h = p.h || 1;
+  const c = document.createElement('canvas');
+  const k = Math.min(1, 160 / Math.max(w, h));
+  c.width = Math.max(8, Math.round(w * k)); c.height = Math.max(8, Math.round(h * k));
+  const x = c.getContext('2d');
+  let hue = 0; for (const ch of p.id) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  const g = x.createLinearGradient(0, 0, c.width, c.height);
+  g.addColorStop(0, `hsl(${hue},70%,64%)`); g.addColorStop(1, `hsl(${(hue + 50) % 360},72%,40%)`);
+  x.fillStyle = g; x.fillRect(0, 0, c.width, c.height);
+  const url = c.toDataURL(); fbCache.set(p.id, url); return url;
+}
+
+const curFolder = () => folders.find(f => f.id === folderId);
+function currentList() {
+  if (tab === 'fav') return photos.filter(p => favs.has(p.id));
+  if (tab === 'folders') { const f = curFolder(); return f ? f.photos : []; }
+  return photos;
+}
+
+/* ================= thumbnails ================= */
+async function thumbFromFile(file) {
+  let src, w, h;
+  try {
+    src = await createImageBitmap(file); w = src.width; h = src.height;
+  } catch {   // e.g. SVG: fall back to an <img>
+    const url = URL.createObjectURL(file);
+    try {
+      src = new Image(); src.src = url; await src.decode();
+      w = src.naturalWidth || 300; h = src.naturalHeight || 300;
+    } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+  }
+  const k = Math.min(1, 400 / Math.min(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  src.close && src.close();
+  const blob = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('toBlob')), 'image/jpeg', 0.85));
+  return { blob, w, h };
+}
+
+// Folder photos get thumbnails lazily, only when they scroll into view.
+const tq = []; let tActive = 0;
+function enqueueThumb(p) { if (p.thumb || p.broken || p._tq || p._tbusy || !p.file) return; p._tq = true; tq.push(p); pumpThumbs(); }
+function dequeueThumb(p) { if (!p._tq) return; const i = tq.indexOf(p); if (i >= 0) tq.splice(i, 1); p._tq = false; }
+function pumpThumbs() {
+  while (tActive < 3 && tq.length) {
+    const p = tq.shift(); p._tq = false; p._tbusy = true; tActive++;
+    makeThumb(p).catch(() => { p.broken = true; }).finally(() => { p._tbusy = false; tActive--; applyThumb(p); pumpThumbs(); });
+  }
+}
+async function makeThumb(p) {
+  const key = `${p.id}|${p.size}|${p.date}`;
+  try {
+    const c = await db.get('thumbs', key);
+    if (c) { p.w = c.w; p.h = c.h; p.thumb = URL.createObjectURL(c.blob); return; }
+  } catch {}
+  const { blob, w, h } = await thumbFromFile(p.file);
+  p.w = w; p.h = h; p.thumb = URL.createObjectURL(blob);
+  db.put('thumbs', { key, blob, w, h }).catch(() => {});
+}
+function applyThumb(p) {
+  document.querySelectorAll(`img[data-tid="${CSS.escape(p.id)}"]`).forEach(img => {
+    thumbObserver.unobserve(img);
+    img.src = p.broken ? fallback(p) : p.thumb;
+  });
+}
+const thumbObserver = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    const p = byId.get(e.target.dataset.tid);
+    if (!p) { thumbObserver.unobserve(e.target); continue; }
+    e.isIntersecting ? enqueueThumb(p) : dequeueThumb(p);
+  }
+}, { rootMargin: '500px 0px' });
+
+function thumbImg(p) {
+  const img = new Image();
+  img.alt = ''; img.draggable = false; img.decoding = 'async';
+  img.dataset.tid = p.id;
+  img.onload = () => img.classList.add('loaded');
+  img.onerror = () => { if (!img.dataset.fb) { img.dataset.fb = 1; p.broken = true; img.src = fallback(p); } };
+  if (p.broken) img.src = fallback(p);
+  else if (p.thumb) { img.loading = 'lazy'; img.src = p.thumb; }
+  else if (p.file) thumbObserver.observe(img);
+  else img.src = p.src;
+  return img;
+}
+
+/* ================= folders ================= */
+async function scanDir(dir, fid, prefix = '', out = [], depth = 0) {
+  for await (const [name, h] of dir.entries()) {
+    if (name.startsWith('.')) continue;
+    if (h.kind === 'file') {
+      if (!IMG_RE.test(name)) continue;
+      try {
+        const file = await h.getFile();
+        out.push({ id: `f:${fid}:${prefix}${name}`, folder: fid, name: prefix + name, date: file.lastModified, size: file.size,
+                   file, src: URL.createObjectURL(file), thumb: null, w: 0, h: 0 });
+      } catch {}
+    } else if (depth < 8) {
+      await scanDir(h, fid, prefix + name + '/', out, depth + 1);
+    }
+    if (out.length >= 10000) break;
+  }
+  return out;
+}
+
+// Re-read a folder from disk. Returns true if anything changed.
+async function refreshFolder(f, interactive) {
+  if (f.kind !== 'handle') return false;
+  try {
+    let perm = await f.handle.queryPermission({ mode: 'read' });
+    if (perm !== 'granted' && interactive) perm = await f.handle.requestPermission({ mode: 'read' });
+    if (perm !== 'granted') { const ch = f.status !== 'locked'; f.status = 'locked'; return ch; }
+    if (f.status !== 'ok') { f.status = 'loading'; safeRender(); }
+    const old = new Map(f.photos.map(p => [p.id, p]));
+    const found = await scanDir(f.handle, f.id);
+    let changed = f.status !== 'ok' || found.length !== f.photos.length;
+    const next = found.map(n => {
+      const o = old.get(n.id);
+      if (o && o.size === n.size && o.date === n.date) {   // unchanged: keep thumbnail
+        URL.revokeObjectURL(n.src); o.file = n.file; old.delete(n.id); return o;
+      }
+      changed = true; return n;
+    });
+    for (const o of old.values()) { changed = true; URL.revokeObjectURL(o.src); if (o.thumb) URL.revokeObjectURL(o.thumb); }
+    f.photos = next.sort(byDate);
+    f.status = 'ok';
+    if (changed) rebuild();
+    return changed;
+  } catch (e) {
+    console.warn(e);
+    f.status = 'error'; f.photos = []; rebuild();
+    return true;
+  }
+}
+
+async function addFolder() {
+  if (!window.showDirectoryPicker) { $('#folderInput').click(); return; }
+  let handle;
+  try { handle = await window.showDirectoryPicker({ id: 'photo-folders', mode: 'read' }); }
+  catch (e) { if (e.name !== 'AbortError') toast(tr('cantOpenFolder')); return; }
+  for (const f of folders) {
+    if (f.handle && await f.handle.isSameEntry(handle).catch(() => false)) {
+      toast(tr('folderExists')); goFolder(f); return;
+    }
+  }
+  const f = { id: uid('F'), name: handle.name, kind: 'handle', handle, added: Date.now(), photos: [], status: 'loading' };
+  folders.push(f);
+  try { await db.put('folders', { id: f.id, name: f.name, kind: f.kind, handle, added: f.added }); }
+  catch (e) { console.warn(e); toast(tr('cantRemember')); }
+  rebuild(); goFolder(f);
+  await refreshFolder(f, false);
+  rebuild(); safeRender();
+  if (f.status === 'ok') toast(tr('folderAdded', { name: f.name, n: f.photos.length }));
+}
+
+// Fallback for browsers without folder access (Safari/Firefox): copy the folder's images into the browser.
+$('#folderInput').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  if (!files.length) return;
+  const name = (files[0].webkitRelativePath || '').split('/')[0] || tr('folderDefault');
+  const f = { id: uid('F'), name, kind: 'copy', added: Date.now(), photos: [], status: 'loading' };
+  folders.push(f);
+  db.put('folders', { id: f.id, name, kind: 'copy', added: f.added }).catch(() => {});
+  rebuild(); goFolder(f);
+  const imgs = files.filter(x => IMG_RE.test(x.name));
+  await importFiles(imgs, f);
+  f.status = 'ok'; safeRender();
+});
+
+async function removeFolder(f) {
+  if (!confirm(tr('removeConfirm', { name: f.name }))) return;
+  folders = folders.filter(x => x !== f);
+  db.del('folders', f.id).catch(() => {});
+  for (const p of f.photos) {
+    if (f.kind === 'copy') db.del('photos', p.id).catch(() => {});
+    URL.revokeObjectURL(p.src); if (p.thumb) URL.revokeObjectURL(p.thumb);
+  }
+  folderId = null; rebuild(); render();
+  toast(tr('folderRemoved', { name: f.name }));
+}
+
+/* ================= views ================= */
+const BADGE = '<svg class="badge" viewBox="0 0 24 24"><path fill="currentColor" d="M12 20.5s-7.5-4.6-9.6-9.2C.8 7.6 3 4 6.6 4c2.2 0 3.9 1.2 5.4 3.1C13.5 5.2 15.2 4 17.4 4 21 4 23.2 7.6 21.6 11.3 19.5 15.9 12 20.5 12 20.5z"/></svg>';
+
+const NAV_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+const NAV_SHARE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M8 10H6.5A2.5 2.5 0 0 0 4 12.5v6A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5H16"/></svg>';
+
+const CHECK = '<span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12.5l3.5 3.5 7.5-8"/></svg></span>';
+
+function setEmpty(show, icon, title, text, btn) {
+  emptyEl.classList.toggle('show', show);
+  if (!show) return;
+  $('#emptyIcon').innerHTML = ICON[icon];
+  $('#emptyTitle').textContent = title;
+  $('#emptyText').textContent = text;
+  const b = $('#emptyBtn'); b.hidden = !btn; if (btn) b.textContent = btn;
+}
+
+function updateNav() {
+  const f = tab === 'folders' ? curFolder() : null;
+  nav.classList.toggle('has-back', !!f);
+  const share = tab === 'fav';
+  addBtn.classList.toggle('danger', !!f);
+  $('#addIcon').innerHTML = f || selecting ? '' : share ? NAV_SHARE : NAV_PLUS;
+  addLabel.textContent = tr(f ? 'remove' : selecting ? 'cancel' : share ? 'shareToIphone' : 'add');
+  addBtn.setAttribute('aria-label', tr(f ? 'ariaRemoveFolder' : selecting ? 'ariaCancelSelect' : share ? 'ariaShare' : tab === 'folders' ? 'ariaAddFolder' : 'ariaAdd'));
+}
+
+function render() {
+  thumbObserver.disconnect();
+  const f = tab === 'folders' ? curFolder() : null;
+  updateNav();
+
+  if (tab === 'folders' && !f) { renderAlbums(); return; }
+  albumsEl.hidden = albumHint.hidden = true;
+  grid.hidden = false;
+
+  const items = currentList();
+  const frag = document.createDocumentFragment();
+  for (const p of items) {
+    const b = document.createElement('button');
+    b.className = 'cell' + (favs.has(p.id) ? ' fav' : '') + (selected.has(p.id) ? ' sel' : '');
+    b.dataset.id = p.id;
+    b.setAttribute('aria-label', tr('photoAria', { d: fmtDate(new Date(p.date)) }));
+    b.append(thumbImg(p));
+    b.insertAdjacentHTML('beforeend', BADGE + CHECK);
+    frag.append(b);
+  }
+  grid.replaceChildren(frag);
+
+  const name = tab === 'fav' ? tr('favorites') : f ? f.name : tr('library');
+  titleEl.textContent = navTitle.textContent = backLabel.textContent = name;
+  countEl.textContent = items.length ? tr(tab === 'fav' ? 'nFavs' : f ? 'nImages' : 'nPhotos', { n: items.length }) : '';
+
+  if (items.length) setEmpty(false);
+  else if (tab === 'fav') setEmpty(true, 'heart', tr('emptyFavTitle'), tr('emptyFavText'));
+  else if (!f) setEmpty(true, 'photo', tr('emptyAllTitle'), tr('emptyAllText'));
+  else if (f.status === 'loading') setEmpty(true, 'folder', tr('loading'), '');
+  else if (f.status === 'locked') setEmpty(true, 'lock', tr('lockedTitle'), tr('lockedText'), tr('allowAccess'));
+  else if (f.status === 'error') setEmpty(true, 'warn', tr('errorTitle'), tr('errorText'));
+  else setEmpty(true, 'folder', tr('noImagesTitle'), tr('noImagesText'));
+}
+
+function renderAlbums() {
+  grid.hidden = true; grid.replaceChildren();
+  albumsEl.hidden = false;
+  albumHint.hidden = folders.length > 0;
+  setEmpty(false);
+  titleEl.textContent = navTitle.textContent = tr('folders');
+  countEl.textContent = folders.length ? tr('nFolders', { n: folders.length }) : '';
+  const frag = document.createDocumentFragment();
+  for (const f of folders) {
+    const a = document.createElement('button');
+    a.className = 'album' + (f.status === 'locked' ? ' locked' : '');
+    a.dataset.fid = f.id;
+    const cover = document.createElement('div'); cover.className = 'cover';
+    if (f.status === 'ok' && f.photos.length) cover.append(thumbImg(f.photos[0]));
+    else cover.innerHTML = ICON[f.status === 'locked' ? 'lock' : f.status === 'error' ? 'warn' : 'folder'];
+    const meta = f.status === 'locked' ? tr('metaLocked') : f.status === 'error' ? tr('metaError') : f.status === 'loading' ? tr('loading') : tr('nShort', { n: f.photos.length });
+    const nm = document.createElement('div'); nm.className = 'name'; nm.textContent = f.name;
+    const mt = document.createElement('div'); mt.className = 'meta'; mt.textContent = meta;
+    a.append(cover, nm, mt);
+    frag.append(a);
+  }
+  const n = document.createElement('button');
+  n.className = 'album new';
+  n.innerHTML = `<div class="cover">${ICON.plus}</div><div class="name">${tr('addFolder')}</div><div class="meta">&nbsp;</div>`;
+  frag.append(n);
+  albumsEl.replaceChildren(frag);
+}
+
+function safeRender() { if (isOpen) needsRender = true; else render(); }
+
+function setTab(t) {
+  exitSelect();
+  tab = t; folderId = null; favDirty = false;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === t));
+  window.scrollTo(0, 0); render();
+}
+function goFolder(f) {
+  if (tab !== 'folders') document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === 'folders'));
+  tab = 'folders'; folderId = f.id; favDirty = false;
+  window.scrollTo(0, 0); render();
+  if (f.kind === 'handle' && f.status === 'ok') {   // pick up files added since last time
+    refreshFolder(f, false).then(ch => { if (ch && folderId === f.id) safeRender(); });
+  }
+}
+async function unlockFolder(f) {
+  await refreshFolder(f, true);
+  rebuild();
+  if (tab === 'folders' && (!folderId || folderId === f.id)) safeRender();
+  if (f.status === 'locked') toast(tr('noAccess'));
+}
+
+grid.addEventListener('click', e => {
+  const cell = e.target.closest('.cell');
+  if (!cell || isOpen) return;
+  if (selecting) {
+    const id = cell.dataset.id;
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    cell.classList.toggle('sel', selected.has(id));
+    updateSelBar();
+    return;
+  }
+  const list = currentList();
+  const i = list.findIndex(p => p.id === cell.dataset.id);
+  if (i >= 0) openViewer(list, i, cell);
+});
+albumsEl.addEventListener('click', e => {
+  const a = e.target.closest('.album'); if (!a) return;
+  if (a.classList.contains('new')) { addFolder(); return; }
+  const f = folders.find(x => x.id === a.dataset.fid); if (!f) return;
+  if (f.status === 'locked') unlockFolder(f).then(() => { if (f.status === 'ok') goFolder(f); });
+  else goFolder(f);
+});
+$('#emptyBtn').addEventListener('click', () => { const f = curFolder(); if (f) unlockFolder(f); });
+$('#navBack').addEventListener('click', () => { folderId = null; window.scrollTo(0, 0); render(); });
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  if (tab === t.dataset.tab && !folderId) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  setTab(t.dataset.tab);
+}));
+addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 30), { passive: true });
+
+/* ---- add button + action sheet ---- */
+const sheet = $('#sheet');
+const openSheet = () => sheet.classList.add('show');
+const closeSheet = () => sheet.classList.remove('show');
+addBtn.addEventListener('click', () => {
+  const f = tab === 'folders' && curFolder();
+  if (f) removeFolder(f);
+  else if (tab === 'folders') addFolder();
+  else if (tab === 'fav') selecting ? exitSelect() : enterSelect();
+  else openSheet();
+});
+
+/* ---- choose which favorites to share ---- */
+function updateSelBar() {
+  const n = selected.size, total = currentList().length;
+  $('#selCount').textContent = n ? tr('nSelected', { n }) : tr('tapToSelect');
+  $('#selShare').disabled = !n;
+  $('#selAll').textContent = tr(n && n === total ? 'deselectAll' : 'selectAll');
+}
+function markSelection() { grid.querySelectorAll('.cell').forEach(c => c.classList.toggle('sel', selected.has(c.dataset.id))); }
+function enterSelect() {
+  if (!currentList().length) { toast(tr('noFavsYet')); return; }
+  selecting = true; selected.clear(); markSelection();
+  document.body.classList.add('selecting');
+  updateNav(); updateSelBar();
+}
+function exitSelect() {
+  if (!selecting) return;
+  selecting = false; selected.clear(); markSelection();
+  document.body.classList.remove('selecting');
+  updateNav();
+}
+$('#selAll').addEventListener('click', () => {
+  const list = currentList(), all = selected.size === list.length;
+  selected.clear();
+  if (!all) list.forEach(p => selected.add(p.id));
+  markSelection(); updateSelBar();
+});
+$('#selShare').addEventListener('click', () => {
+  const list = currentList().filter(p => selected.has(p.id));
+  exitSelect();
+  shareToPhone(list);
+});
+
+/* ================= share favorites to iPhone over Wi-Fi ================= */
+// The page must be opened through server.js (启动照片.cmd). The app sends the favorite
+// photos to that server, and the iPhone opens http://<this PC>:<port>/phone to save them.
+const shareModal = $('#shareModal'), shareBody = $('#shareBody');
+let shareRun = 0;
+function closeShare() { shareModal.hidden = true; shareRun++; }
+$('#shareDone').addEventListener('click', closeShare);
+shareModal.addEventListener('click', e => { if (e.target === shareModal) closeShare(); });
+
+function shareFileName(p, type) {
+  if (p.name) return p.name.split('/').pop();
+  const d = new Date(p.date), z = n => String(n).padStart(2, '0');
+  const t = type || '';
+  const ext = t.includes('png') ? 'png' : t.includes('gif') ? 'gif' : t.includes('webp') ? 'webp' : 'jpg';
+  return `IMG_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.${ext}`;
+}
+
+// Works whether this page was double-clicked (file://) or served by server.js.
+async function findServer() {
+  const bases = location.protocol.startsWith('http') ? [''] : [];
+  for (let port = 8848; port < 8853; port++) bases.push(`http://localhost:${port}`);
+  for (const base of bases) {
+    try {
+      const r = await fetch(base + '/api/info', { cache: 'no-store' });
+      if (r.ok) return { base, info: await r.json() };
+    } catch {}
+  }
+  return null;
+}
+
+async function shareToPhone(list) {
+  if (!list || !list.length) { toast(tr('noneSelected')); return; }
+  const run = ++shareRun;
+  shareModal.hidden = false;
+  shareBody.innerHTML = '<div class="progress"><i id="shareBar"></i></div><p class="share-note" id="shareMsg">' + tr('preparing') + '</p>';
+
+  const srv = await findServer();
+  if (run !== shareRun) return;
+  if (!srv) {
+    shareBody.innerHTML =
+      `<p class="share-note big">${tr('needServer')}</p>` +
+      `<p class="share-note">${tr('needServerNote')}</p>`;
+    return;
+  }
+  const { base, info } = srv;
+  const H = { 'X-Photo-App': '1' };
+
+  await fetch(base + '/api/share/clear', { method: 'POST', headers: H }).catch(() => {});
+  let done = 0, failed = 0;
+  for (const p of list) {
+    if (run !== shareRun) return;
+    try {
+      let r;
+      if (/^https?:/.test(p.src)) {
+        r = await fetch(base + '/api/share/add-url', { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: p.src, name: shareFileName(p, 'image/jpeg'), date: p.date }) });
+      } else {
+        const blob = p.file || await (await fetch(p.src)).blob();
+        r = await fetch(base + `/api/share/add?name=${encodeURIComponent(shareFileName(p, blob.type))}&date=${p.date}`,
+          { method: 'POST', headers: { ...H, 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+      }
+      if (!r.ok) throw new Error();
+    } catch { failed++; }
+    done++;
+    const bar = $('#shareBar'), msg = $('#shareMsg');
+    if (bar) bar.style.width = (done / list.length * 100) + '%';
+    if (msg) msg.textContent = tr('preparingN', { i: done, n: list.length });
+  }
+  if (run !== shareRun) return;
+
+  if (!info.ips.length) {
+    shareBody.innerHTML = `<p class="share-note big">${tr('noWifi')}</p>`;
+    return;
+  }
+  const url = `http://${info.ips[0]}:${info.port}/phone`;
+  const others = info.ips.slice(1).map(ip => `http://${ip}:${info.port}/phone`);
+  shareBody.innerHTML = `
+    <div class="qr" id="qrBox"></div>
+    <div class="share-url">${url}</div>
+    <ol class="steps">
+      <li>${tr('step1')}</li>
+      <li>${tr('step2')}</li>
+      <li>${tr('step3')}</li>
+    </ol>
+    <p class="share-note">${tr('ready', { n: list.length - failed })}${failed ? tr('readyFailed', { n: failed }) : ''}${tr('firewall')}${others.length ? `<br>${tr('tryAlso')}<br>${others.join('<br>')}` : ''}</p>`;
+  renderQR($('#qrBox'), url);
+}
+
+async function renderQR(box, text) {
+  try {
+    if (!window.qrcode) await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+      s.onload = res; s.onerror = rej; document.head.append(s);
+    });
+    const qr = window.qrcode(0, 'M'); qr.addData(text); qr.make();
+    const n = qr.getModuleCount(); let d = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+    box.innerHTML = `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" role="img" aria-label="${tr('qr')}"><path fill="#000" d="${d}"/></svg>`;
+  } catch { box.remove(); }   // no internet for the QR library: the link text is still shown
+}
+sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
+$('#sheetCancel').addEventListener('click', closeSheet);
+$('#pickPhotos').addEventListener('click', () => { closeSheet(); fileInput.click(); });
+$('#pickFolder').addEventListener('click', () => { closeSheet(); addFolder(); });
+
+/* ================= date format ================= */
+function fmtDate(d) {
+  const now = new Date(), day = 864e5;
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const ms = d.getTime();
+  if (ms >= startToday) return tr('today');
+  if (ms >= startToday - day) return tr('yesterday');
+  const opts = { month: 'long', day: 'numeric' };
+  if (d.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString(LOCALE, opts);
+}
+const fmtTime = d => d.toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' });
+
+/* ================= spring physics ================= */
+function spring({ from, to, velocity = 0, stiffness = 300, damping = 30, precision = 0.5, onUpdate, onDone }) {
+  let x = from, v = velocity, last = null, raf = 0, alive = true;
+  const step = now => {
+    if (!alive) return;
+    if (last === null) last = now - 16;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const n = Math.max(1, Math.ceil(dt / 0.004)), h = dt / n;
+    for (let k = 0; k < n; k++) { const a = -stiffness * (x - to) - damping * v; v += a * h; x += v * h; }
+    if (Math.abs(x - to) < precision && Math.abs(v) < precision * 20) {
+      alive = false; onUpdate(to); onDone && onDone(); return;
+    }
+    onUpdate(x); raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return { stop() { alive = false; cancelAnimationFrame(raf); } };
+}
+// iOS-style rubber band: resistance grows the further you pull
+const rubber = (d, dim) => (1 - 1 / (d * 0.55 / dim + 1)) * dim;
+function rubberRange(x, min, max, dim) {
+  if (x > max) return max + rubber(x - max, dim);
+  if (x < min) return min - rubber(min - x, dim);
+  return x;
+}
+
+/* ================= viewer ================= */
+let vList = [], vIndex = 0, W = 0, H = 0, trackX = 0, trackAnim = null, isOpen = false, animating = false;
+const slides = new Map();
+let liftedId = null;
+
+const measure = () => { W = viewer.clientWidth; H = viewer.clientHeight; };
+const pageX = i => -i * (W + GAP);
+const cur = () => slides.get(vIndex);
+const findCell = id => grid.querySelector(`.cell[data-id="${CSS.escape(id)}"]`);
+function setTrack(x) { trackX = x; track.style.transform = `translate3d(${x}px,0,0)`; }
+const stopTrack = () => { if (trackAnim) { trackAnim.stop(); trackAnim = null; } };
+const setBg = o => { bg.style.opacity = o; };
+const applyT = s => { s.img.style.transform = `translate3d(${s.tx}px,${s.ty}px,0) scale(${s.s})`; };
+function bounds(s, sc = s.s) { return { bx: Math.max(0, (s.fw * sc - W) / 2), by: Math.max(0, (s.fh * sc - H) / 2) }; }
+function clampT(s) { const { bx, by } = bounds(s); s.tx = clamp(s.tx, -bx, bx); s.ty = clamp(s.ty, -by, by); }
+
+function layoutSlide(s) {
+  const pw = s.p.w || 1, ph = s.p.h || 1;
+  const k = Math.min(W / pw, H / ph);
+  s.fw = pw * k; s.fh = ph * k;
+  Object.assign(s.el.style, { left: s.i * (W + GAP) + 'px', width: W + 'px', height: H + 'px' });
+  Object.assign(s.img.style, { width: s.fw + 'px', height: s.fh + 'px' });
+  applyT(s);
+}
+function makeSlide(i) {
+  const p = vList[i];
+  const el = document.createElement('div'); el.className = 'slide';
+  const img = new Image(); img.alt = ''; img.draggable = false;
+  const s = { i, p, el, img, s: 1, tx: 0, ty: 0, anim: null, fw: 0, fh: 0 };
+  img.onload = () => {   // learn the real size of folder photos that have no thumbnail yet
+    if ((!p.w || !p.h) && img.naturalWidth) { p.w = img.naturalWidth; p.h = img.naturalHeight; if (slides.get(i) === s) layoutSlide(s); }
+  };
+  img.onerror = () => { if (!img.dataset.fb) { img.dataset.fb = 1; p.broken = true; img.src = fallback(p); } };
+  img.src = p.broken ? fallback(p) : (p.thumb || p.src);   // show thumbnail first,
+  if (!p.broken && p.thumb && p.src !== p.thumb) {         // then swap in the full-size photo
+    const full = new Image();
+    full.onload = () => { if (!img.dataset.fb) img.src = p.src; };
+    full.src = p.src;
+  }
+  el.append(img); track.append(el); layoutSlide(s);
+  return s;
+}
+function ensureSlides() {
+  const lo = Math.max(0, vIndex - 2), hi = Math.min(vList.length - 1, vIndex + 2);
+  for (const [i, s] of slides) if (i < lo || i > hi) { s.anim && s.anim.stop(); s.el.remove(); slides.delete(i); }
+  for (let i = lo; i <= hi; i++) if (!slides.has(i)) slides.set(i, makeSlide(i));
+}
+function clearSlides() { for (const s of slides.values()) { s.anim && s.anim.stop(); s.el.remove(); } slides.clear(); }
+
+function scrollCellIntoView(cell) {
+  const r = cell.getBoundingClientRect();
+  const top = nav.getBoundingClientRect().bottom, bottom = tabbar.getBoundingClientRect().top;
+  if (r.top < top) scrollBy(0, r.top - top - 4);
+  else if (r.bottom > bottom) scrollBy(0, r.bottom - bottom + 4);
+}
+function liftThumb(id) {
+  if (liftedId === id) return;
+  if (liftedId) { const c = findCell(liftedId); c && c.classList.remove('lifted'); }
+  liftedId = id;
+  const c = id && findCell(id);
+  if (c) { c.classList.add('lifted'); scrollCellIntoView(c); }
+}
+
+function updateChrome() {
+  const p = vList[vIndex]; if (!p) return;
+  const d = new Date(p.date);
+  vDate.textContent = fmtDate(d);
+  vTime.textContent = fmtTime(d) + (p.name ? ' · ' + p.name.split('/').pop() : '');
+  vCount.textContent = `${vIndex + 1} / ${vList.length}`;
+  const on = favs.has(p.id);
+  heartBtn.classList.toggle('on', on);
+  heartBtn.setAttribute('aria-pressed', on);
+  heartBtn.setAttribute('aria-label', tr(on ? 'unfav' : 'fav'));
+  prevBtn.disabled = vIndex === 0;
+  nextBtn.disabled = vIndex === vList.length - 1;
+  liftThumb(p.id);
+}
+
+function goTo(i, velocity = 0) {
+  i = clamp(i, 0, vList.length - 1);
+  if (i !== vIndex) { vIndex = i; ensureSlides(); updateChrome(); }
+  stopTrack();
+  trackAnim = spring({
+    from: trackX, to: pageX(i), velocity, stiffness: 260, damping: 32, precision: 0.3,
+    onUpdate: setTrack,
+    onDone: () => {
+      trackAnim = null;
+      for (const s of slides.values()) if (s.i !== vIndex && (s.s !== 1 || s.tx || s.ty)) { s.s = 1; s.tx = s.ty = 0; applyT(s); }
+    },
+  });
+}
+
+function animateZoom(s, to, onFrame) {
+  s.anim && s.anim.stop();
+  const f = { s: s.s, tx: s.tx, ty: s.ty };
+  s.anim = spring({
+    from: 0, to: 1, stiffness: 320, damping: 32, precision: 0.001,
+    onUpdate: t => { s.s = lerp(f.s, to.s, t); s.tx = lerp(f.tx, to.tx, t); s.ty = lerp(f.ty, to.ty, t); applyT(s); onFrame && onFrame(t); },
+    onDone: () => { s.anim = null; },
+  });
+}
+
+/* ---- hero (thumbnail <-> full screen) transition ---- */
+// box: clip rect (x,y,w,h) + image inside it (ix,iy,iw,ih) + opacity
+function boxFromRect(r, s) {
+  const k = Math.max(r.width / s.fw, r.height / s.fh), iw = s.fw * k, ih = s.fh * k;
+  return { x: r.left, y: r.top, w: r.width, h: r.height, ix: (r.width - iw) / 2, iy: (r.height - ih) / 2, iw, ih, o: 1 };
+}
+function boxFromSlide(s) {
+  const off = trackX - pageX(s.i);
+  const iw = s.fw * s.s, ih = s.fh * s.s;
+  const X = off + W / 2 + s.tx - iw / 2, Y = H / 2 + s.ty - ih / 2;
+  const x0 = Math.max(0, X), y0 = Math.max(0, Y), x1 = Math.min(W, X + iw), y1 = Math.min(H, Y + ih);
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0), ix: X - x0, iy: Y - y0, iw, ih, o: 1 };
+}
+function hero(a, b, src, s, { stiffness, damping, onFrame, onDone }) {
+  const fl = document.createElement('div'); fl.className = 'flyer';
+  const im = new Image(); im.src = src; im.draggable = false;
+  im.style.width = s.fw + 'px'; im.style.height = s.fh + 'px';
+  fl.append(im); viewer.append(fl);
+  const apply = t => {
+    const w = Math.max(0, lerp(a.w, b.w, t)), h = Math.max(0, lerp(a.h, b.h, t));
+    fl.style.transform = `translate3d(${lerp(a.x, b.x, t)}px,${lerp(a.y, b.y, t)}px,0)`;
+    fl.style.width = w + 'px'; fl.style.height = h + 'px';
+    fl.style.opacity = lerp(a.o, b.o, clamp01(t));
+    im.style.transform = `translate3d(${lerp(a.ix, b.ix, t)}px,${lerp(a.iy, b.iy, t)}px,0) scale(${Math.max(0, lerp(a.iw, b.iw, t)) / s.fw})`;
+    onFrame && onFrame(t);
+  };
+  apply(0);
+  return spring({ from: 0, to: 1, stiffness, damping, precision: 0.002, onUpdate: apply, onDone: () => { onDone && onDone(); fl.remove(); } });
+}
+
+function openViewer(list, i, cell) {
+  const thumbImgEl = cell.querySelector('img');
+  const p = list[i];
+  if ((!p.w || !p.h) && thumbImgEl.naturalWidth) { p.w = thumbImgEl.naturalWidth; p.h = thumbImgEl.naturalHeight; }
+  isOpen = true; animating = true;
+  vList = list; vIndex = i;
+  viewer.classList.add('open', 'nochrome');
+  viewer.classList.remove('immersive', 'dragging');
+  measure(); clearSlides(); setTrack(pageX(i)); ensureSlides(); updateChrome(); setBg(0);
+  const s = cur();
+  s.img.style.visibility = 'hidden';
+  const from = boxFromRect(cell.getBoundingClientRect(), s), to = boxFromSlide(s);
+  void viewer.offsetWidth;                 // commit hidden state so chrome fades in
+  viewer.classList.remove('nochrome');
+  hero(from, to, thumbImgEl.currentSrc || thumbImgEl.src || s.img.src, s, {
+    stiffness: 260, damping: 27,
+    onFrame: t => setBg(clamp01(t * 1.4)),
+    onDone: () => { s.img.style.visibility = ''; animating = false; },
+  });
+}
+
+function closeViewer() {
+  if (!isOpen || animating) return;
+  animating = true; clearTimeout(tapTimer); stopTrack(); g = null; pointers.clear();
+  const s = cur(); s.anim && s.anim.stop();
+  if ((favDirty && tab === 'fav') || needsRender) { render(); favDirty = needsRender = false; liftedId = null; }
+  const cell = findCell(s.p.id);
+  if (cell) { cell.classList.add('lifted'); liftedId = s.p.id; scrollCellIntoView(cell); }
+  const from = boxFromSlide(s);
+  let to;
+  if (cell) to = boxFromRect(cell.getBoundingClientRect(), s);
+  else {  // photo no longer in the grid: shrink and fade
+    const k = 0.75, cx = from.x + from.w / 2, cy = from.y + from.h / 2;
+    to = { x: cx - from.w * k / 2, y: cy - from.h * k / 2, w: from.w * k, h: from.h * k, ix: from.ix * k, iy: from.iy * k, iw: from.iw * k, ih: from.ih * k, o: 0 };
+  }
+  const bg0 = parseFloat(bg.style.opacity || '1');
+  track.style.visibility = 'hidden';
+  viewer.classList.add('nochrome');
+  hero(from, to, s.img.currentSrc || s.img.src, s, {
+    stiffness: 300, damping: 30,
+    onFrame: t => setBg(bg0 * (1 - clamp01(t * 1.3))),
+    onDone: finishClose,
+  });
+}
+function finishClose() {
+  viewer.classList.remove('open', 'nochrome', 'dragging');
+  track.style.visibility = '';
+  clearSlides();
+  liftThumb(null);
+  isOpen = false; animating = false;
+  if (favDirty || needsRender) { favDirty = needsRender = false; render(); }
+}
+
+/* ---- favorites ---- */
+function toggleFav() {
+  const p = vList[vIndex]; if (!p) return;
+  const on = !favs.has(p.id);
+  on ? favs.add(p.id) : favs.delete(p.id);
+  saveFavs();
+  if (tab === 'fav') favDirty = true;
+  const c = findCell(p.id); c && c.classList.toggle('fav', on);
+  updateChrome();
+  heartBtn.classList.remove('pop'); void heartBtn.offsetWidth; heartBtn.classList.add('pop');
+  if (on) { burst.classList.remove('go'); void burst.getBoundingClientRect(); burst.classList.add('go'); }
+  if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
+}
+heartBtn.addEventListener('click', toggleFav);
+$('#closeBtn').addEventListener('click', closeViewer);
+prevBtn.addEventListener('click', () => !animating && goTo(vIndex - 1));
+nextBtn.addEventListener('click', () => !animating && goTo(vIndex + 1));
+
+/* ---- gestures ---- */
+const pointers = new Map();
+let g = null, lastTap = null, tapTimer = 0;
+
+function velocity(samples) {
+  const now = performance.now();
+  const last = samples[samples.length - 1];
+  if (!last || now - last.t > 80) return { x: 0, y: 0 };   // finger stopped before lifting
+  const first = samples.find(p => last.t - p.t <= 100) || samples[0];
+  const dt = (last.t - first.t) / 1000;
+  if (dt <= 0) return { x: 0, y: 0 };
+  return { x: (last.x - first.x) / dt, y: (last.y - first.y) / dt };
+}
+const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+viewer.addEventListener('pointerdown', e => {
+  if (!isOpen || animating || e.button > 0) return;
+  if (e.target.closest('.v-top, .v-bottom, .v-arrow')) return;
+  try { viewer.setPointerCapture(e.pointerId); } catch {}
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const s = cur(); if (!s) return;
+  if (pointers.size === 1) {
+    const midFlight = !!trackAnim;
+    stopTrack(); s.anim && s.anim.stop();
+    g = {
+      mode: midFlight ? 'page' : null, sx: e.clientX, sy: e.clientY, t: performance.now(),
+      baseX: trackX, from: vIndex, baseTx: s.tx, baseTy: s.ty, baseS: s.s,
+      samples: [{ x: e.clientX, y: e.clientY, t: performance.now() }],
+    };
+  } else if (pointers.size === 2 && g && (g.mode === null || g.mode === 'pan')) {
+    clearTimeout(tapTimer); lastTap = null;
+    if (Math.abs(trackX - pageX(vIndex)) > 0.5) goTo(vIndex);
+    const [a, b] = [...pointers.values()];
+    Object.assign(g, { mode: 'pinch', d0: dist(a, b), c0: mid(a, b), baseS: s.s, baseTx: s.tx, baseTy: s.ty });
+  }
+});
+
+viewer.addEventListener('pointermove', e => {
+  if (!g || !pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const s = cur(); if (!s) return;
+
+  if (g.mode === 'pinch') {
+    if (pointers.size < 2) return;
+    const [a, b] = [...pointers.values()];
+    const c = mid(a, b);
+    let sc = g.baseS * dist(a, b) / g.d0;
+    if (sc > MAX_SCALE) sc = MAX_SCALE + (sc - MAX_SCALE) * 0.3;
+    if (sc < 1) sc = 1 - (1 - sc) * 0.55;
+    const px = (g.c0.x - W / 2 - g.baseTx) / g.baseS, py = (g.c0.y - H / 2 - g.baseTy) / g.baseS;
+    s.s = sc; s.tx = c.x - W / 2 - px * sc; s.ty = c.y - H / 2 - py * sc;
+    applyT(s);
+    if (sc < 1) setBg(clamp01(1 - (1 - sc) * 2.5));
+    return;
+  }
+
+  const now = performance.now();
+  g.samples.push({ x: e.clientX, y: e.clientY, t: now });
+  if (g.samples.length > 20) g.samples.shift();
+  const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+
+  if (!g.mode) {
+    if (Math.hypot(dx, dy) < 6) return;
+    clearTimeout(tapTimer); lastTap = null;
+    if (s.s > 1.01) g.mode = 'pan';
+    else if (Math.abs(dx) > Math.abs(dy)) g.mode = 'page';
+    else if (dy > 0) { g.mode = 'dismiss'; viewer.classList.add('dragging'); }
+    else g.mode = 'none';
+  }
+
+  if (g.mode === 'page') {
+    setTrack(rubberRange(g.baseX + dx, pageX(vList.length - 1), 0, W));
+  } else if (g.mode === 'dismiss') {
+    const yy = dy < 0 ? -rubber(-dy, 300) : dy;
+    const sc = 1 - clamp01(yy / H) * 0.5;
+    const ox = g.sx - W / 2, oy = g.sy - H / 2;    // keep the grabbed point under the finger
+    s.s = sc; s.tx = dx + ox * (1 - sc); s.ty = yy + oy * (1 - sc);
+    applyT(s);
+    setBg(1 - clamp01(yy / (H * 0.4)));
+  } else if (g.mode === 'pan') {
+    const { bx, by } = bounds(s);
+    const tx = g.baseTx + dx, ctx = clamp(tx, -bx, bx), over = tx - ctx;
+    if (over !== 0 && vList.length > 1) {   // hand off to paging when the zoomed photo hits its edge
+      s.tx = ctx; setTrack(rubberRange(g.baseX + over, pageX(vList.length - 1), 0, W));
+    } else s.tx = rubberRange(tx, -bx, bx, W);
+    s.ty = rubberRange(g.baseTy + dy, -by, by, H);
+    applyT(s);
+  }
+});
+
+function settlePage(vx) {
+  const pos = -trackX / (W + GAP);
+  let t;
+  if (vx < -300) t = Math.floor(pos) + 1;
+  else if (vx > 300) t = Math.ceil(pos) - 1;
+  else t = Math.round(pos);
+  t = clamp(t, g.from - 1, g.from + 1);
+  goTo(t, vx);
+}
+function settleZoom(s, vx = 0, vy = 0) {
+  if (s.s <= 1) { animateZoom(s, { s: 1, tx: 0, ty: 0 }, () => setBg(1)); return; }
+  const sc = Math.min(s.s, MAX_SCALE), k = sc / s.s;
+  const { bx, by } = bounds(s, sc);
+  animateZoom(s, { s: sc, tx: clamp(s.tx * k + vx * 0.25, -bx, bx), ty: clamp(s.ty * k + vy * 0.25, -by, by) });
+}
+
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (!g) return;
+  const s = cur(); if (!s) { g = null; return; }
+
+  if (g.mode === 'pinch') {
+    if (pointers.size === 1) {   // continue as a pan with the remaining finger
+      const r = [...pointers.values()][0], now = performance.now();
+      Object.assign(g, { mode: 'pan', sx: r.x, sy: r.y, baseTx: s.tx, baseTy: s.ty, baseX: trackX, samples: [{ ...r, t: now }], wasPinch: true });
+      return;
+    }
+    if (pointers.size === 0) {
+      g = null;
+      if (s.s < 0.75) closeViewer(); else settleZoom(s);
+    }
+    return;
+  }
+  if (pointers.size > 0) return;
+
+  const v = velocity(g.samples);
+  switch (g.mode) {
+    case null:
+      if (performance.now() - g.t < 350 && e.type !== 'pointercancel') handleTap(e.clientX, e.clientY);
+      break;
+    case 'page':
+      settlePage(v.x);
+      break;
+    case 'dismiss': {
+      const dy = e.clientY - g.sy;
+      viewer.classList.remove('dragging');
+      if ((dy > 90 && v.y > -150) || v.y > 800) { g = null; closeViewer(); return; }
+      const bg0 = parseFloat(bg.style.opacity || '1');
+      animateZoom(s, { s: 1, tx: 0, ty: 0 }, t => setBg(lerp(bg0, 1, clamp01(t))));
+      break;
+    }
+    case 'pan': {
+      if (g.wasPinch && s.s < 0.75) { g = null; closeViewer(); return; }
+      const paged = Math.abs(trackX - pageX(vIndex)) > 0.5;
+      if (paged) settlePage(v.x);
+      settleZoom(s, paged ? 0 : v.x, v.y);
+      break;
+    }
+  }
+  g = null;
+}
+viewer.addEventListener('pointerup', endPointer);
+viewer.addEventListener('pointercancel', endPointer);
+
+function handleTap(x, y) {
+  const now = performance.now();
+  if (lastTap && now - lastTap.t < 300 && Math.hypot(x - lastTap.x, y - lastTap.y) < 40) {
+    clearTimeout(tapTimer); lastTap = null; doubleTapZoom(x, y); return;
+  }
+  lastTap = { x, y, t: now };
+  clearTimeout(tapTimer);
+  tapTimer = setTimeout(() => { lastTap = null; viewer.classList.toggle('immersive'); }, 280);
+}
+function doubleTapZoom(x, y) {
+  const s = cur();
+  if (s.s > 1.01) { animateZoom(s, { s: 1, tx: 0, ty: 0 }); return; }
+  const sc = clamp(Math.max(W / s.fw, H / s.fh), 2.2, MAX_SCALE);
+  const px = x - W / 2, py = y - H / 2;
+  const { bx, by } = bounds(s, sc);
+  animateZoom(s, { s: sc, tx: clamp(px * (1 - sc), -bx, bx), ty: clamp(py * (1 - sc), -by, by) });
+}
+
+/* ---- wheel / trackpad (desktop) ---- */
+let wheelAcc = 0, wheelLock = 0, wheelReset = 0;
+viewer.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (!isOpen || animating) return;
+  const s = cur(); if (!s) return;
+  if (e.ctrlKey) {   // trackpad pinch
+    s.anim && s.anim.stop();
+    const sc = clamp(s.s * Math.exp(-e.deltaY * 0.01), 1, MAX_SCALE);
+    const px = (e.clientX - W / 2 - s.tx) / s.s, py = (e.clientY - H / 2 - s.ty) / s.s;
+    s.s = sc; s.tx = e.clientX - W / 2 - px * sc; s.ty = e.clientY - H / 2 - py * sc;
+    clampT(s); applyT(s); return;
+  }
+  if (s.s > 1.01) { s.tx -= e.deltaX; s.ty -= e.deltaY; clampT(s); applyT(s); return; }
+  const now = performance.now();
+  if (now < wheelLock) { wheelLock = Math.max(wheelLock, now + 150); return; }
+  wheelAcc += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+  if (Math.abs(wheelAcc) > 40) {
+    const t = clamp(vIndex + Math.sign(wheelAcc), 0, vList.length - 1);
+    wheelAcc = 0;
+    if (t !== vIndex) { wheelLock = now + 400; goTo(t); }
+  }
+  clearTimeout(wheelReset); wheelReset = setTimeout(() => { wheelAcc = 0; }, 200);
+}, { passive: false });
+
+/* ---- keyboard ---- */
+addEventListener('keydown', e => {
+  if (sheet.classList.contains('show') && e.key === 'Escape') { closeSheet(); return; }
+  if (!shareModal.hidden && e.key === 'Escape') { closeShare(); return; }
+  if (selecting && e.key === 'Escape') { exitSelect(); return; }
+  if (!isOpen) return;
+  if (e.key === 'Escape') closeViewer();
+  else if (animating) return;
+  else if (e.key === 'ArrowRight') goTo(vIndex + 1);
+  else if (e.key === 'ArrowLeft') goTo(vIndex - 1);
+  else if (e.key === 'f' || e.key === 'l') toggleFav();
+  else if (e.key === ' ') viewer.classList.toggle('immersive');
+  else return;
+  e.preventDefault();
+});
+
+addEventListener('resize', () => {
+  if (!isOpen) return;
+  measure(); stopTrack();
+  for (const s of slides.values()) { s.anim && s.anim.stop(); s.s = 1; s.tx = s.ty = 0; layoutSlide(s); }
+  setTrack(pageX(vIndex));
+});
+
+/* ================= import single photos ================= */
+const fileInput = $('#fileInput');
+fileInput.addEventListener('change', () => { importFiles([...fileInput.files]); fileInput.value = ''; });
+
+let dragTimer = 0;
+addEventListener('dragover', e => {
+  if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+  e.preventDefault(); document.body.classList.add('dragover');
+  clearTimeout(dragTimer); dragTimer = setTimeout(() => document.body.classList.remove('dragover'), 150);
+});
+addEventListener('drop', e => {
+  e.preventDefault(); document.body.classList.remove('dragover');
+  if (e.dataTransfer?.files?.length) importFiles([...e.dataTransfer.files]);
+});
+
+// folder = null: loose photos; otherwise copy into that (fallback) folder
+async function importFiles(files, folder = null) {
+  let added = 0, failed = 0;
+  for (const f of files) {
+    if (!f.type.startsWith('image/') && !IMG_RE.test(f.name)) { failed++; continue; }
+    try {
+      const { blob: thumbBlob, w, h } = await thumbFromFile(f);
+      const rec = { id: uid('u'), blob: f, thumbBlob, w, h, date: f.lastModified || Date.now(), added: Date.now(),
+                    name: folder ? (f.webkitRelativePath || f.name).split('/').slice(1).join('/') : undefined, folder: folder ? folder.id : undefined };
+      try { await db.put('photos', rec); } catch (err) { console.warn('save failed', err); }
+      (folder ? folder.photos : imported).push(fromRec(rec)); added++;
+    } catch (err) { console.warn(err); failed++; }
+  }
+  if (folder) folder.photos.sort(byDate);
+  rebuild();
+  if (!folder && added && tab !== 'all') setTab('all'); else safeRender();
+  if (added && !folder) window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast(added ? tr('addedPhotos', { n: added }) + (failed ? tr('someFailed', { n: failed }) : '') : tr(files.length ? 'cantRead' : 'noImagesFound'));
+}
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+/* ================= start ================= */
+render();
+(async () => {
+  try {
+    const [recs, frecs] = await Promise.all([db.all('photos'), db.all('folders')]);
+    folders = (frecs || []).sort((a, b) => a.added - b.added).map(r => ({
+      id: r.id, name: r.name, kind: r.kind, handle: r.handle, added: r.added, photos: [],
+      status: r.kind === 'handle' ? 'loading' : 'ok',
+    }));
+    for (const r of recs || []) {
+      const p = fromRec(r);
+      if (r.folder) { const f = folders.find(x => x.id === r.folder); if (f) f.photos.push(p); }
+      else imported.push(p);
+    }
+    folders.forEach(f => f.photos.sort(byDate));
+    rebuild(); safeRender();
+    for (const f of folders) {
+      if (f.kind !== 'handle') continue;
+      await refreshFolder(f, false);
+      rebuild(); safeRender();
+    }
+  } catch (e) { console.warn(e); }
+})();
+})();
+</script>
+</body>
+</html>

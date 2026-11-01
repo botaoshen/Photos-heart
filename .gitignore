@@ -1,0 +1,11 @@
+# local tool settings
+.claude/
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# logs
+*.log
+node_modules/
